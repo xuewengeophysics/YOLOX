@@ -11,3 +11,4 @@ ninja
 tabulate
 tensorboard
 onnxruntime
+ipdb
