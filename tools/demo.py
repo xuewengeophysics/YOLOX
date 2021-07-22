@@ -12,6 +12,11 @@ import cv2
 import torch
 import torch.backends.cudnn as cudnn
 
+import ipdb
+import sys
+cur_path = os.path.split(os.path.realpath(__file__))[0]
+sys.path.insert(0, os.path.join(cur_path, "../"))
+
 from yolox.data.data_augment import preproc
 from yolox.data.datasets import COCO_CLASSES
 from yolox.exp import get_exp
