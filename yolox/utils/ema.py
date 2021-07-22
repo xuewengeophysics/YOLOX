@@ -10,7 +10,14 @@ import torch.nn as nn
 
 def is_parallel(model):
     """check if model is in parallel mode."""
+    """
     import apex
+    """
+    try:
+        import apex
+        has_apex = True
+    except ImportError:
+        has_apex = False
 
     parallel_type = (
         nn.parallel.DataParallel,
