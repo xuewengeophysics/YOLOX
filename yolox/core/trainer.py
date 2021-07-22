@@ -7,9 +7,21 @@ import os
 import time
 from loguru import logger
 
+"""
 import apex
+"""
+
 import torch
+"""
 from apex import amp
+"""
+try:
+    import apex
+    from apex import amp
+    has_apex = True
+except ImportError:
+    has_apex = False
+
 from torch.utils.tensorboard import SummaryWriter
 
 from yolox.data import DataPrefetcher
