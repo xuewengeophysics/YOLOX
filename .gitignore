@@ -214,3 +214,4 @@ events.out.tfevents*
 .vim
 
 pretrained/
+YOLOX_outputs/
