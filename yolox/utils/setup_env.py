@@ -3,7 +3,9 @@
 # Copyright (c) 2014-2021 Megvii Inc. All rights reserved.
 
 import os
+"""
 import resource
+"""
 import subprocess
 
 import cv2
@@ -31,8 +33,10 @@ def configure_module(ulimit_value=8192):
         ulimit_value(int): default open file number on linux. Default value: 4096.
     """
     # system setting
+    """
     rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE, (ulimit_value, rlimit[1]))
+    """
     # cv2
     # multiprocess might be harmful on performance of torch dataloader
     os.environ["OPENCV_OPENCL_RUNTIME"] = "disabled"
