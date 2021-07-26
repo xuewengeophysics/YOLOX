@@ -41,6 +41,7 @@ from yolox.utils import (
     synchronize
 )
 
+import ipdb
 
 class Trainer:
 
@@ -159,9 +160,13 @@ class Trainer:
             no_aug=self.no_aug
         )
         logger.info("init prefetcher, this might take one minute or less...")
+        ##self.prefetcher.next_target.shape为[2, 120, 5]；120个目标，[cls_idx, x, y, w, h]
+        ##self.prefetcher.next_input.shape为[2, 3, 640, 640]
         self.prefetcher = DataPrefetcher(self.train_loader)
         # max_iter means iters per epoch
         self.max_iter = len(self.train_loader)
+
+        ipdb.set_trace()
 
         self.lr_scheduler = self.exp.get_lr_scheduler(
             self.exp.basic_lr_per_img * self.args.batch_size, self.max_iter

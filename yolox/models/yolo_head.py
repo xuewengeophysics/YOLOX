@@ -175,17 +175,21 @@ class YOLOXHead(nn.Module):
                         .reshape(batch_size, -1, 4)
                     )
                     origin_preds.append(reg_output.clone())
+                ##len(outputs)为3
+                ##outputs[0].shape为[B, 85, 8, 8]，FPN中的P3层，下采样8倍；以640的输入为例，则为80
+                ##outputs[1].shape为[B, 85, 4, 4]，FPN中的P4层，下采样16倍；以640的输入为例，则为40
+                ##outputs[2].shape为[B, 85, 2, 2]，FPN中的P5层，下采样32倍；以640的输入为例，则为20
 
             else:
                 output = torch.cat([reg_output, obj_output.sigmoid(), cls_output.sigmoid()], 1)
-
+                ##len(outputs)为3
+                ##outputs[0].shape为[B, 85, 80, 80]，FPN中的P3层，下采样8倍；以640的输入为例，则为80
+                ##outputs[1].shape为[B, 85, 40, 40]，FPN中的P4层，下采样16倍；以640的输入为例，则为40
+                ##outputs[2].shape为[B, 85, 20, 20]，FPN中的P5层，下采样32倍；以640的输入为例，则为20
             outputs.append(output)
 
-        ##len(outputs)为3
-        ##outputs[0].shape为[1, 85, 80, 80]，FPN中的P3层，下采样8倍；以640的输入为例，则为80
-        ##outputs[1].shape为[1, 85, 40, 40]，FPN中的P4层，下采样16倍；以640的输入为例，则为40
-        ##outputs[2].shape为[1, 85, 20, 20]，FPN中的P5层，下采样32倍；以640的输入为例，则为20
-        ipdb.set_trace()
+
+        # ipdb.set_trace()
 
         if self.training:
             return self.get_losses(

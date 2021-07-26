@@ -7,6 +7,7 @@ import torch.nn as nn
 from .yolo_head import YOLOXHead
 from .yolo_pafpn import YOLOPAFPN
 
+import ipdb
 
 class YOLOX(nn.Module):
     """
@@ -26,6 +27,7 @@ class YOLOX(nn.Module):
         self.head = head
 
     def forward(self, x, targets=None):
+        ipdb.set_trace()
         # fpn output content features of [dark3, dark4, dark5]
         fpn_outs = self.backbone(x)
 

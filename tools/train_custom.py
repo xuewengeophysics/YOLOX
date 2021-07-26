@@ -2,6 +2,10 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) Megvii, Inc. and its affiliates.
 
+"""
+python tools/train_custom.py -n yolox-s -d 1 -b 2 -o
+"""
+
 import argparse
 import random
 import warnings
@@ -63,7 +67,7 @@ def make_parser():
     parser.add_argument(
         "--fp16",
         dest="fp16",
-        default=True,
+        default=False,
         action="store_true",
         help="Adopting mix precision training.",
     )
@@ -109,8 +113,11 @@ def main(exp, args):
 
 if __name__ == "__main__":
     args = make_parser().parse_args()
+    ##exps、yolox/exp(存放实验参数)
     exp = get_exp(args.exp_file, args.name)
     exp.merge(args.opts)
+
+    # ipdb.set_trace()
 
     num_gpu = torch.cuda.device_count() if args.devices is None else args.devices
     assert num_gpu <= torch.cuda.device_count()
