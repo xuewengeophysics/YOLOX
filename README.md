@@ -8,6 +8,7 @@ For more details, please refer to our [report on Arxiv](https://arxiv.org/abs/21
 <img src="assets/git_fig.png" width="1000" >
 
 ## Updates!!
+* 【2021/07/26】 We now support [MegEngine](https://github.com/Megvii-BaseDetection/YOLOX/tree/main/demo/MegEngine) deployment.
 * 【2021/07/20】 We have released our technical report on [Arxiv](https://arxiv.org/abs/2107.08430).
 
 ## Comming soon
@@ -152,10 +153,11 @@ python tools/eval.py -n  yolox-s -c yolox_s.pth.tar -b 1 -d 1 --conf 0.001 --fp1
 ## Deployment
 
 
-1.  [ONNX export and an ONNXRuntime](./demo/ONNXRuntime)
-2.  [TensorRT in C++ and Python](./demo/TensorRT)
-3.  [ncnn in C++ and Java](./demo/ncnn)
-4.  [OpenVINO in C++ and Python](./demo/OpenVINO)
+1.  [MegEngine in C++ and Python](./demo/MegEngine)
+2.  [ONNX export and an ONNXRuntime](./demo/ONNXRuntime)
+3.  [TensorRT in C++ and Python](./demo/TensorRT)
+4.  [ncnn in C++ and Java](./demo/ncnn)
+5.  [OpenVINO in C++ and Python](./demo/OpenVINO)
 
 
 ## Third-party resources
