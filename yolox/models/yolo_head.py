@@ -227,12 +227,11 @@ class YOLOXHead(nn.Module):
             outputs.append(output)
 
 
-        ipdb.set_trace()
         ##imgs.shape为[B, 3, 640, 640]
         ##type(x_shifts)为'list'，x_shifts[0].shape为[1, 6400]，x_shifts[1].shape为[1, 1600]，x_shifts[2].shape为[1, 400]
         ##type(y_shifts)为'list'，y_shifts[0].shape为[1, 6400]，y_shifts[1].shape为[1, 1600]，y_shifts[2].shape为[1, 400]
         ##type(expanded_strides)为'list'，expanded_strides[0].shape为[1, 6400]，expanded_strides[1].shape为[1, 1600]，expanded_strides[2].shape为[1, 400]
-        ##labels.shape为[2, 120, 5]，[cls, x, y, w, h]
+        ##labels.shape为[B, 120, 5]，[cls, x, y, w, h]
         ##type(outputs)为'list'，outputs[0].shape为[B, 6400, 85]，outputs[1].shape为[B, 1600, 85]，outputs[2].shape为[B, 400, 85]
         ##[[B, 6400, 85], [B, 1600, 85], [B, 400, 85]]->[B, 8400, 85]
         ##xin[0].dtype为'torch.float32'
@@ -291,8 +290,19 @@ class YOLOXHead(nn.Module):
     def get_losses(
         self, imgs, x_shifts, y_shifts, expanded_strides, labels, outputs, origin_preds, dtype,
     ):
+        ##imgs.shape为[B, 3, 640, 640]
+        ##type(x_shifts)为'list'，x_shifts[0].shape为[1, 6400]，x_shifts[1].shape为[1, 1600]，x_shifts[2].shape为[1, 400]
+        ##type(y_shifts)为'list'，y_shifts[0].shape为[1, 6400]，y_shifts[1].shape为[1, 1600]，y_shifts[2].shape为[1, 400]
+        ##type(expanded_strides)为'list'，expanded_strides[0].shape为[1, 6400]，expanded_strides[1].shape为[1, 1600]，expanded_strides[2].shape为[1, 400]
+        ##labels.shape为[B, 120, 5]，[cls, x, y, w, h]
+        ##outputs.shape为[B, 8400, 85]
+        ##xin[0].dtype为'torch.float32'
+
+        ##bbox_preds.shape为[B, 8400, 4]
         bbox_preds = outputs[:, :, :4]  # [batch, n_anchors_all, 4]
+        ##obj_preds.shape为[B, 8400, 1]
         obj_preds = outputs[:, :, 4].unsqueeze(-1)  # [batch, n_anchors_all, 1]
+        ##cls_preds.shape为[B, 8400, 80]
         cls_preds = outputs[:, :, 5:]  # [batch, n_anchors_all, n_cls]
 
         # calculate targets
@@ -301,11 +311,20 @@ class YOLOXHead(nn.Module):
             label_cut = labels[..., :5]
         else:
             label_cut = labels
+        ##[B, 120, 5]->[B, 120]->[B]；代表这个batch_size中每个imgs的GT目标数量
         nlabel = (label_cut.sum(dim=2) > 0).sum(dim=1)  # number of objects
 
+        ##以640x640的图片为例，(640/8)**2 + (640/16)**2 + (640/32)**2 = 8400
         total_num_anchors = outputs.shape[1]
+        ##x_shifts.shape为[1, 8400]
         x_shifts = torch.cat(x_shifts, 1)  # [1, n_anchors_all]
+        ##y_shifts.shape为[1, 8400]
         y_shifts = torch.cat(y_shifts, 1)  # [1, n_anchors_all]
+        ##expanded_strides.shape为[1, 8400]
+        ##expanded_strides代表FPN各层特征的stride值映射到原图上的真实stride值
+        ##expanded_strides[0, :6400]都等于8
+        ##expanded_strides[0, 6400:8000]都等于16
+        ##expanded_strides[0, 8000:8400]都等于32
         expanded_strides = torch.cat(expanded_strides, 1)
         if self.use_l1:
             origin_preds = torch.cat(origin_preds, 1)
@@ -320,17 +339,28 @@ class YOLOXHead(nn.Module):
         num_gts = 0.0
 
         for batch_idx in range(outputs.shape[0]):
+            ##num_gt代表imgs[batch_idx]图片中的目标数量
             num_gt = int(nlabel[batch_idx])
+            ##num_gts代表这个batch_size的所有图片中的目标数量总数
             num_gts += num_gt
             if num_gt == 0:
+                ##cls_target.shape为[0, 80]
                 cls_target = outputs.new_zeros((0, self.num_classes))
+                ##reg_target.shape为[0, 4]
                 reg_target = outputs.new_zeros((0, 4))
+                ##l1_target.shape为[0, 4]
                 l1_target = outputs.new_zeros((0, 4))
+                ##obj_target.shape为[8400, 1]
                 obj_target = outputs.new_zeros((total_num_anchors, 1))
+                ##fg_mask.shape为[8400]
                 fg_mask = outputs.new_zeros(total_num_anchors).bool()
             else:
+                ##labels.shape为[B, 120, 5]，120是设置的每张图片中目标数量的最大值(max_labels)
+                ##gt_bboxes_per_image代表imgs[batch_idx]图片中的所有目标的bbox；gt_bboxes_per_image.shape为[num_gt, 4]
                 gt_bboxes_per_image = labels[batch_idx, :num_gt, 1:5]
+                ##gt_classes代表imgs[batch_idx]图片中的所有目标的cls_idx；gt_classes.shape为[num_gt]
                 gt_classes = labels[batch_idx, :num_gt, 0]
+                ##bbox_preds.shape为[B, 8400, 4]；bboxes_preds_per_image.shape为[8400, 4]
                 bboxes_preds_per_image = bbox_preds[batch_idx]
 
                 try:
@@ -352,13 +382,26 @@ class YOLOXHead(nn.Module):
                         cls_preds, bbox_preds, obj_preds, labels, imgs, "cpu",
                     )
 
+                ##gt_matched_classes.shape为[11]，代表与gt匹配的预测目标的cls_idx
+                ##fg_mask.shape为[8400]，元素为True/False；sum(fg_mask)=11，代表网络输出的预测结果中与GT匹配的为True
+                ##pred_ious_this_matching.shape为[11]，代表通过标签匹配得到的预测bbox与GT bbox的iou
+                ##matched_gt_inds.shape为[11]，代表与11个预测目标所匹配的GT目标的索引值，例如[3, 5, 1, 6, 5, 1, 6, 3, 0, 2, 0]，案例中GT目标数是7
+                ##num_fg_img为11，代表通过标签匹配得到的图像中的前景目标(预测结果)的数量
                 torch.cuda.empty_cache()
+                ##num_fg代表这个batch_size的所有图片中的通过标签匹配得到的前景目标(预测结果)的总数；结合Dynamic K去理解？
+                ##注意：num_gts与num_fg的区别，以及num_gt与num_fg_img的区别
                 num_fg += num_fg_img
 
+                ##F.one_hot(gt_matched_classes.to(torch.int64), self.num_classes).shape为[11, 80]，将匹配的前景目标的cls转换成ont-hot向量([11]->[11, 80])
+                ##pred_ious_this_matching.unsqueeze(-1)：[11]->[11, 1]
+                ##将类别信息与bbox的iou信息相乘
+                ##cls_target.shape为[11, 80]
                 cls_target = F.one_hot(
                     gt_matched_classes.to(torch.int64), self.num_classes
                 ) * pred_ious_this_matching.unsqueeze(-1)
+                ##[8400]->[8400, 1]
                 obj_target = fg_mask.unsqueeze(-1)
+                ##gt_bboxes_per_image.shape为[num_gt, 4]；reg_target.shape为[11, 4]
                 reg_target = gt_bboxes_per_image[matched_gt_inds]
                 if self.use_l1:
                     l1_target = self.get_l1_target(
@@ -376,16 +419,38 @@ class YOLOXHead(nn.Module):
             if self.use_l1:
                 l1_targets.append(l1_target)
 
+        ##len(cls_targets)为batch_size；cls_targets[k].shape为[11, 80]
+        ##len(reg_targets)为batch_size；reg_targets[k].shape为[11, 4]
+        ##len(obj_targets)为batch_size；obj_targets[k].shape为[8400, 1]
+        ##len(fg_masks)为batch_size；fg_masks[k].shape为[8400]
+        ipdb.set_trace()
+
+        ##在第0维对batch_size个张量进行拼接
+        ##[[11, 80], [11, 80]]->[22, 80]
         cls_targets = torch.cat(cls_targets, 0)
+        ##[[11, 4], [11, 4]]->[22, 4]
         reg_targets = torch.cat(reg_targets, 0)
+        ##[[8400, 1], [8400, 1]]->[16800, 1]
         obj_targets = torch.cat(obj_targets, 0)
+        ##[[8400], [8400]]->[16800]
         fg_masks = torch.cat(fg_masks, 0)
         if self.use_l1:
             l1_targets = torch.cat(l1_targets, 0)
 
+        ##num_fg为22.0
         num_fg = max(num_fg, 1)
+        ##bbox_preds.shape为[2, 8400, 4]，[2, 8400, 4]->[16800, 4]
+        ##fg_masks.shape为[16800]，元素为True/False；sum(fg_masks)=22，代表网络输出的预测结果中与GT匹配的为True
+        ##[16800, 4]->[22, 4]
+        ##reg_targets.shape为[22, 4]
         loss_iou = (self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)).sum() / num_fg
+        ##obj_preds.shape为[2, 8400, 1]，[2, 8400, 1]->[16800, 1]
+        ##obj_targets.shape为[16800, 1]，元素为1/0；sum(obj_targets)=22，代表网络输出的预测结果中与GT匹配的为1
         loss_obj = (self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)).sum() / num_fg
+        ##cls_preds.shape为[2, 8400, 80]，[2, 8400, 80]->[16800, 80]
+        ##fg_masks.shape为[16800]，元素为True/False；sum(fg_masks)=22，代表网络输出的预测结果中与GT匹配的为True
+        ##[16800, 80]->[22, 80]
+        ##cls_targets.shape为[22, 80]
         loss_cls = (
             self.bcewithlog_loss(cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets)
         ).sum() / num_fg
