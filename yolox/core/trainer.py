@@ -59,6 +59,7 @@ class Trainer:
         self.local_rank = get_local_rank()
         self.device = "cuda:{}".format(self.local_rank)
         self.use_model_ema = exp.ema
+        self.use_model_ema = False
 
         # data/dataloader related attr
         self.data_type = torch.float16 if args.fp16 else torch.float32
@@ -166,7 +167,7 @@ class Trainer:
         # max_iter means iters per epoch
         self.max_iter = len(self.train_loader)
 
-        ipdb.set_trace()
+        # ipdb.set_trace()
 
         self.lr_scheduler = self.exp.get_lr_scheduler(
             self.exp.basic_lr_per_img * self.args.batch_size, self.max_iter

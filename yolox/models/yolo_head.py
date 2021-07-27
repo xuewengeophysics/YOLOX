@@ -40,6 +40,7 @@ class YOLOXHead(nn.Module):
         self.stems = nn.ModuleList()
         Conv = DWConv if depthwise else BaseConv
 
+        ##对应paper中图(2)的网络结构
         for i in range(len(in_channels)):
             self.stems.append(
                 BaseConv(
@@ -138,6 +139,12 @@ class YOLOXHead(nn.Module):
             conv.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, xin, labels=None, imgs=None):
+        ##type(xin)为'tuple'，len(xin)为3
+        ##xin[0].shape为[B, 128, 80, 80]，FPN中的P3层，下采样8倍；以640的输入为例，则为80
+        ##xin[1].shape为[B, 256, 40, 40]，FPN中的P4层，下采样16倍；以640的输入为例，则为40
+        ##xin[2].shape为[B, 512, 20, 20]，FPN中的P5层，下采样32倍；以640的输入为例，则为20
+        ##labels.shape为[B, 120, 5]，[cls, x, y, w, h]
+        ##imgs.shape为[2, 3, 640, 640]
         outputs = []
         origin_preds = []
         x_shifts = []
@@ -147,22 +154,53 @@ class YOLOXHead(nn.Module):
         for k, (cls_conv, reg_conv, stride_this_level, x) in enumerate(
             zip(self.cls_convs, self.reg_convs, self.strides, xin)
         ):
+            ##当k=0时，[B, 128, 80, 80]->[B, 128, 80, 80]
+            ##当k=1时，[B, 256, 40, 40]->[B, 256, 40, 40]
+            ##当k=2时，[B, 512, 20, 20]->[B, 512, 20, 20]
             x = self.stems[k](x)
             cls_x = x
             reg_x = x
 
+            ##当k=0时，[B, 128, 80, 80]->[B, 128, 80, 80]
+            ##当k=1时，[B, 256, 40, 40]->[B, 256, 40, 40]
+            ##当k=2时，[B, 512, 20, 20]->[B, 512, 20, 20]
             cls_feat = cls_conv(cls_x)
+            ##当k=0时，[B, 128, 80, 80]->[B, 80, 80, 80]
+            ##当k=1时，[B, 256, 40, 40]->[B, 80, 40, 40]
+            ##当k=2时，[B, 512, 20, 20]->[B, 80, 20, 20]
             cls_output = self.cls_preds[k](cls_feat)
 
+            ##当k=0时，[B, 128, 80, 80]->[B, 128, 80, 80]
+            ##当k=1时，[B, 256, 40, 40]->[B, 256, 40, 40]
+            ##当k=2时，[B, 512, 20, 20]->[B, 512, 20, 20]
             reg_feat = reg_conv(reg_x)
+            ##当k=0时，[B, 128, 80, 80]->[B, 4, 80, 80]
+            ##当k=1时，[B, 256, 40, 40]->[B, 4, 40, 40]
+            ##当k=2时，[B, 512, 20, 20]->[B, 4, 20, 20]            
             reg_output = self.reg_preds[k](reg_feat)
+            ##当k=0时，[B, 128, 80, 80]->[B, 1, 80, 80]
+            ##当k=1时，[B, 256, 40, 40]->[B, 1, 40, 40]
+            ##当k=2时，[B, 512, 20, 20]->[B, 1, 20, 20]            
             obj_output = self.obj_preds[k](reg_feat)
 
             if self.training:
+                ##当k=0时，[[B, 4, 80, 80], [B, 1, 80, 80], [B, 80, 80, 80]]->[2, 85, 80, 80]
+                ##当k=1时，[[B, 4, 40, 40], [B, 1, 40, 40], [B, 80, 40, 40]]->[2, 85, 40, 40]
+                ##当k=2时，[[B, 4, 20, 20], [B, 1, 20, 20], [B, 80, 20, 20]]->[2, 85, 20, 20]
                 output = torch.cat([reg_output, obj_output, cls_output], 1)
+                ##当k=0时，output.shape为[B, 6400, 85]，grid.shape为[1, 6400, 2]
+                ##当k=1时，output.shape为[B, 1600, 85]，grid.shape为[1, 1600, 2]
+                ##当k=2时，output.shape为[B,  400, 85]，grid.shape为[1,  400, 2]
                 output, grid = self.get_output_and_grid(output, k, stride_this_level, xin[0].type())
+                ##当k=0，x_shifts[k].shape为[1, 6400]，y_shifts[k].shape为[1, 6400]
+                ##当k=1，x_shifts[k].shape为[1, 1600]，y_shifts[k].shape为[1, 1600]
+                ##当k=2，x_shifts[k].shape为[1,  400]，y_shifts[k].shape为[1,  400]
                 x_shifts.append(grid[:, :, 0])
                 y_shifts.append(grid[:, :, 1])
+                ##expanded_strides代表FPN各层特征的stride值映射到原图上的真实stride值
+                ##当k=0，stride_this_level为 8，expanded_strides[k].shape为[1, 6400]
+                ##当k=1，stride_this_level为16，expanded_strides[k].shape为[1, 1600]
+                ##当k=2，stride_this_level为32，expanded_strides[k].shape为[1,  400]
                 expanded_strides.append(
                     torch.zeros(1, grid.shape[1]).fill_(stride_this_level).type_as(xin[0])
                 )
@@ -176,9 +214,9 @@ class YOLOXHead(nn.Module):
                     )
                     origin_preds.append(reg_output.clone())
                 ##len(outputs)为3
-                ##outputs[0].shape为[B, 85, 8, 8]，FPN中的P3层，下采样8倍；以640的输入为例，则为80
-                ##outputs[1].shape为[B, 85, 4, 4]，FPN中的P4层，下采样16倍；以640的输入为例，则为40
-                ##outputs[2].shape为[B, 85, 2, 2]，FPN中的P5层，下采样32倍；以640的输入为例，则为20
+                ##outputs[0].shape为[B, 6400, 85]，FPN中的P3层，下采样8倍；以640的输入为例，则为80
+                ##outputs[1].shape为[B, 1600, 85]，FPN中的P4层，下采样16倍；以640的输入为例，则为40
+                ##outputs[2].shape为[B,  400, 85]，FPN中的P5层，下采样32倍；以640的输入为例，则为20
 
             else:
                 output = torch.cat([reg_output, obj_output.sigmoid(), cls_output.sigmoid()], 1)
@@ -189,8 +227,15 @@ class YOLOXHead(nn.Module):
             outputs.append(output)
 
 
-        # ipdb.set_trace()
-
+        ipdb.set_trace()
+        ##imgs.shape为[B, 3, 640, 640]
+        ##type(x_shifts)为'list'，x_shifts[0].shape为[1, 6400]，x_shifts[1].shape为[1, 1600]，x_shifts[2].shape为[1, 400]
+        ##type(y_shifts)为'list'，y_shifts[0].shape为[1, 6400]，y_shifts[1].shape为[1, 1600]，y_shifts[2].shape为[1, 400]
+        ##type(expanded_strides)为'list'，expanded_strides[0].shape为[1, 6400]，expanded_strides[1].shape为[1, 1600]，expanded_strides[2].shape为[1, 400]
+        ##labels.shape为[2, 120, 5]，[cls, x, y, w, h]
+        ##type(outputs)为'list'，outputs[0].shape为[B, 6400, 85]，outputs[1].shape为[B, 1600, 85]，outputs[2].shape为[B, 400, 85]
+        ##[[B, 6400, 85], [B, 1600, 85], [B, 400, 85]]->[B, 8400, 85]
+        ##xin[0].dtype为'torch.float32'
         if self.training:
             return self.get_losses(
                 imgs, x_shifts, y_shifts, expanded_strides, labels,
