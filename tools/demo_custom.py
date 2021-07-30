@@ -127,7 +127,7 @@ class Predictor(object):
         ipdb.set_trace()
         with torch.no_grad():
             t0 = time.time()
-            ipdb.set_trace()
+            # ipdb.set_trace()
             ##img.shape为[1, 3, 640, 640]
             ##outputs.shape为[1, 8400, 85]
             ##0:x,1:y,2:w,3:h,4:IoU
@@ -135,6 +135,7 @@ class Predictor(object):
             ipdb.set_trace()
             if self.decoder is not None:
                 outputs = self.decoder(outputs, dtype=outputs.type())
+            ##type(outputs)为'list'，len(outputs)为1，outputs[0].shape为[4, 7]
             outputs = postprocess(
                         outputs, self.num_classes, self.confthre, self.nmsthre
                     )

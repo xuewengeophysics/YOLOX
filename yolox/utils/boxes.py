@@ -2,6 +2,7 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) 2014-2021 Megvii Inc. All rights reserved.
 
+import ipdb
 import numpy as np
 
 import torch
@@ -25,15 +26,26 @@ def filter_box(output, scale_range):
 
 
 def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
+    ipdb.set_trace()
+    ##prediction.shape为[1, 8400, 85]
+    ##num_classes为80
+    ##box_corner.shape为[1, 8400, 85]
     box_corner = prediction.new(prediction.shape)
+    ##box_corner[:, :, 0].shape为[1, 8400]
     box_corner[:, :, 0] = prediction[:, :, 0] - prediction[:, :, 2] / 2
+    ##box_corner[:, :, 1].shape为[1, 8400]
     box_corner[:, :, 1] = prediction[:, :, 1] - prediction[:, :, 3] / 2
+    ##box_corner[:, :, 2].shape为[1, 8400]
     box_corner[:, :, 2] = prediction[:, :, 0] + prediction[:, :, 2] / 2
+    ##box_corner[:, :, 3].shape为[1, 8400]
     box_corner[:, :, 3] = prediction[:, :, 1] + prediction[:, :, 3] / 2
+    ##prediction[:, :, :4].shape为[1, 8400, 4]
     prediction[:, :, :4] = box_corner[:, :, :4]
 
+    ##len(output)为batch_size
     output = [None for _ in range(len(prediction))]
     for i, image_pred in enumerate(prediction):
+        ipdb.set_trace()
 
         # If none are remaining => process next image
         if not image_pred.size(0):
