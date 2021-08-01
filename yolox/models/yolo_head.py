@@ -2,7 +2,6 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) 2014-2021 Megvii Inc. All rights reserved.
 
-import math
 from loguru import logger
 
 import torch
@@ -11,6 +10,8 @@ import torch.nn.functional as F
 
 from yolox.utils import bboxes_iou
 
+import math
+
 from .losses import IOUloss
 from .network_blocks import BaseConv, DWConv
 
@@ -18,8 +19,13 @@ import ipdb
 
 class YOLOXHead(nn.Module):
     def __init__(
-        self, num_classes, width=1.0, strides=[8, 16, 32],
-        in_channels=[256, 512, 1024], act="silu", depthwise=False
+        self,
+        num_classes,
+        width=1.0,
+        strides=[8, 16, 32],
+        in_channels=[256, 512, 1024],
+        act="silu",
+        depthwise=False,
     ):
         """
         Args:
@@ -188,10 +194,14 @@ class YOLOXHead(nn.Module):
                 ##当k=1时，[[B, 4, 40, 40], [B, 1, 40, 40], [B, 80, 40, 40]]->[2, 85, 40, 40]
                 ##当k=2时，[[B, 4, 20, 20], [B, 1, 20, 20], [B, 80, 20, 20]]->[2, 85, 20, 20]
                 output = torch.cat([reg_output, obj_output, cls_output], 1)
+
                 ##当k=0时，output.shape为[B, 6400, 85]，grid.shape为[1, 6400, 2]
                 ##当k=1时，output.shape为[B, 1600, 85]，grid.shape为[1, 1600, 2]
                 ##当k=2时，output.shape为[B,  400, 85]，grid.shape为[1,  400, 2]
-                output, grid = self.get_output_and_grid(output, k, stride_this_level, xin[0].type())
+                output, grid = self.get_output_and_grid(
+                    output, k, stride_this_level, xin[0].type()
+                )
+
                 ##当k=0，x_shifts[k].shape为[1, 6400]，y_shifts[k].shape为[1, 6400]
                 ##当k=1，x_shifts[k].shape为[1, 1600]，y_shifts[k].shape为[1, 1600]
                 ##当k=2，x_shifts[k].shape为[1,  400]，y_shifts[k].shape为[1,  400]
@@ -202,15 +212,18 @@ class YOLOXHead(nn.Module):
                 ##当k=1，stride_this_level为16，expanded_strides[k].shape为[1, 1600]
                 ##当k=2，stride_this_level为32，expanded_strides[k].shape为[1,  400]
                 expanded_strides.append(
-                    torch.zeros(1, grid.shape[1]).fill_(stride_this_level).type_as(xin[0])
+                    torch.zeros(1, grid.shape[1])
+                    .fill_(stride_this_level)
+                    .type_as(xin[0])
                 )
                 if self.use_l1:
                     batch_size = reg_output.shape[0]
                     hsize, wsize = reg_output.shape[-2:]
-                    reg_output = reg_output.view(batch_size, self.n_anchors, 4, hsize, wsize)
-                    reg_output = (
-                        reg_output.permute(0, 1, 3, 4, 2)
-                        .reshape(batch_size, -1, 4)
+                    reg_output = reg_output.view(
+                        batch_size, self.n_anchors, 4, hsize, wsize
+                    )
+                    reg_output = reg_output.permute(0, 1, 3, 4, 2).reshape(
+                        batch_size, -1, 4
                     )
                     origin_preds.append(reg_output.clone())
                 ##len(outputs)为3
@@ -219,11 +232,14 @@ class YOLOXHead(nn.Module):
                 ##outputs[2].shape为[B,  400, 85]，FPN中的P5层，下采样32倍；以640的输入为例，则为20
 
             else:
-                output = torch.cat([reg_output, obj_output.sigmoid(), cls_output.sigmoid()], 1)
                 ##len(outputs)为3
                 ##outputs[0].shape为[B, 85, 80, 80]，FPN中的P3层，下采样8倍；以640的输入为例，则为80
                 ##outputs[1].shape为[B, 85, 40, 40]，FPN中的P4层，下采样16倍；以640的输入为例，则为40
                 ##outputs[2].shape为[B, 85, 20, 20]，FPN中的P5层，下采样32倍；以640的输入为例，则为20
+                output = torch.cat(
+                    [reg_output, obj_output.sigmoid(), cls_output.sigmoid()], 1
+                )
+
             outputs.append(output)
 
         if self.training:
@@ -236,8 +252,14 @@ class YOLOXHead(nn.Module):
             ##[[B, 6400, 85], [B, 1600, 85], [B, 400, 85]]->[B, 8400, 85]
             ##xin[0].dtype为'torch.float32'
             return self.get_losses(
-                imgs, x_shifts, y_shifts, expanded_strides, labels,
-                torch.cat(outputs, 1), origin_preds, dtype=xin[0].dtype
+                imgs,
+                x_shifts,
+                y_shifts,
+                expanded_strides,
+                labels,
+                torch.cat(outputs, 1),
+                origin_preds,
+                dtype=xin[0].dtype,
             )
         else:
             ##type(outputs)为'list'，len(outputs)为3
@@ -247,12 +269,16 @@ class YOLOXHead(nn.Module):
             ##self.hw为[torch.Size([80, 80]), torch.Size([40, 40]), torch.Size([20, 20])]
             self.hw = [x.shape[-2:] for x in outputs]
             # [batch, n_anchors_all, 85]
+
             ##outputs[0].flatten(start_dim=2)：[1, 85, 80, 80]->[1, 85, 6400]
             ##outputs[1].flatten(start_dim=2)：[1, 85, 40, 40]->[1, 85, 1600]
             ##outputs[2].flatten(start_dim=2)：[1, 85, 20, 20]->[1, 85,  400]
             ##[[1, 85, 6400], [1, 85, 1600], [1, 85, 400]]->[1, 85, 8400]->[1, 8400, 85]
             ##outputs.shape为[1, 8400, 85]
-            outputs = torch.cat([x.flatten(start_dim=2) for x in outputs], dim=2).permute(0, 2, 1)
+            outputs = torch.cat(
+                [x.flatten(start_dim=2) for x in outputs], dim=2
+            ).permute(0, 2, 1)
+
             if self.decode_in_inference:
                 ##xin[0].shape为[B, 128, 80, 80]，FPN中的P3层，下采样8倍；以640的输入为例，则为80
                 ##xin[1].shape为[B, 256, 40, 40]，FPN中的P4层，下采样16倍；以640的输入为例，则为40
@@ -274,9 +300,8 @@ class YOLOXHead(nn.Module):
             self.grids[k] = grid
 
         output = output.view(batch_size, self.n_anchors, n_ch, hsize, wsize)
-        output = (
-            output.permute(0, 1, 3, 4, 2)
-            .reshape(batch_size, self.n_anchors * hsize * wsize, -1)
+        output = output.permute(0, 1, 3, 4, 2).reshape(
+            batch_size, self.n_anchors * hsize * wsize, -1
         )
         grid = grid.view(1, -1, 2)
         output[..., :2] = (output[..., :2] + grid) * stride
@@ -321,7 +346,15 @@ class YOLOXHead(nn.Module):
         return outputs
 
     def get_losses(
-        self, imgs, x_shifts, y_shifts, expanded_strides, labels, outputs, origin_preds, dtype,
+        self,
+        imgs,
+        x_shifts,
+        y_shifts,
+        expanded_strides,
+        labels,
+        outputs,
+        origin_preds,
+        dtype,
     ):
         ##imgs.shape为[B, 3, 640, 640]
         ##type(x_shifts)为'list'，x_shifts[0].shape为[1, 6400]，x_shifts[1].shape为[1, 1600]，x_shifts[2].shape为[1, 400]
@@ -397,10 +430,27 @@ class YOLOXHead(nn.Module):
                 bboxes_preds_per_image = bbox_preds[batch_idx]
 
                 try:
-                    gt_matched_classes, fg_mask, pred_ious_this_matching, matched_gt_inds, num_fg_img = self.get_assignments(  # noqa
-                        batch_idx, num_gt, total_num_anchors, gt_bboxes_per_image, gt_classes,
-                        bboxes_preds_per_image, expanded_strides, x_shifts, y_shifts,
-                        cls_preds, bbox_preds, obj_preds, labels, imgs,
+                    (
+                        gt_matched_classes,
+                        fg_mask,
+                        pred_ious_this_matching,
+                        matched_gt_inds,
+                        num_fg_img,
+                    ) = self.get_assignments(  # noqa
+                        batch_idx,
+                        num_gt,
+                        total_num_anchors,
+                        gt_bboxes_per_image,
+                        gt_classes,
+                        bboxes_preds_per_image,
+                        expanded_strides,
+                        x_shifts,
+                        y_shifts,
+                        cls_preds,
+                        bbox_preds,
+                        obj_preds,
+                        labels,
+                        imgs,
                     )
                 except RuntimeError:
                     logger.error(
@@ -409,10 +459,28 @@ class YOLOXHead(nn.Module):
                            try to reduce the batch size or image size."
                     )
                     torch.cuda.empty_cache()
-                    gt_matched_classes, fg_mask, pred_ious_this_matching, matched_gt_inds, num_fg_img = self.get_assignments(  # noqa
-                        batch_idx, num_gt, total_num_anchors, gt_bboxes_per_image, gt_classes,
-                        bboxes_preds_per_image, expanded_strides, x_shifts, y_shifts,
-                        cls_preds, bbox_preds, obj_preds, labels, imgs, "cpu",
+                    (
+                        gt_matched_classes,
+                        fg_mask,
+                        pred_ious_this_matching,
+                        matched_gt_inds,
+                        num_fg_img,
+                    ) = self.get_assignments(  # noqa
+                        batch_idx,
+                        num_gt,
+                        total_num_anchors,
+                        gt_bboxes_per_image,
+                        gt_classes,
+                        bboxes_preds_per_image,
+                        expanded_strides,
+                        x_shifts,
+                        y_shifts,
+                        cls_preds,
+                        bbox_preds,
+                        obj_preds,
+                        labels,
+                        imgs,
+                        "cpu",
                     )
 
                 ##gt_matched_classes.shape为[11]，代表与gt匹配的预测目标的cls_idx
@@ -473,30 +541,46 @@ class YOLOXHead(nn.Module):
 
         ##num_fg为22.0
         num_fg = max(num_fg, 1)
+
         ##bbox_preds.shape为[2, 8400, 4]，[2, 8400, 4]->[16800, 4]
         ##fg_masks.shape为[16800]，元素为True/False；sum(fg_masks)=22，代表网络输出的预测结果中与GT匹配的为True
         ##[16800, 4]->[22, 4]
         ##reg_targets.shape为[22, 4]
-        loss_iou = (self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)).sum() / num_fg
+        loss_iou = (
+            self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)
+        ).sum() / num_fg
         ##obj_preds.shape为[2, 8400, 1]，[2, 8400, 1]->[16800, 1]
         ##obj_targets.shape为[16800, 1]，元素为1/0；sum(obj_targets)=22，代表网络输出的预测结果中与GT匹配的为1
-        loss_obj = (self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)).sum() / num_fg
+        loss_obj = (
+            self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)
+        ).sum() / num_fg        
         ##cls_preds.shape为[2, 8400, 80]，[2, 8400, 80]->[16800, 80]
         ##fg_masks.shape为[16800]，元素为True/False；sum(fg_masks)=22，代表网络输出的预测结果中与GT匹配的为True
         ##[16800, 80]->[22, 80]
         ##cls_targets.shape为[22, 80]
         loss_cls = (
-            self.bcewithlog_loss(cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets)
+            self.bcewithlog_loss(
+                cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
+            )
         ).sum() / num_fg
         if self.use_l1:
-            loss_l1 = (self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)).sum() / num_fg
+            loss_l1 = (
+                self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)
+            ).sum() / num_fg
         else:
             loss_l1 = 0.0
 
         reg_weight = 5.0
         loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_l1
 
-        return loss, reg_weight * loss_iou, loss_obj, loss_cls, loss_l1, num_fg / max(num_gts, 1)
+        return (
+            loss,
+            reg_weight * loss_iou,
+            loss_obj,
+            loss_cls,
+            loss_l1,
+            num_fg / max(num_gts, 1),
+        )
 
     def get_l1_target(self, l1_target, gt, stride, x_shifts, y_shifts, eps=1e-8):
         l1_target[:, 0] = gt[:, 0] / stride - x_shifts
@@ -507,9 +591,22 @@ class YOLOXHead(nn.Module):
 
     @torch.no_grad()
     def get_assignments(
-        self, batch_idx, num_gt, total_num_anchors, gt_bboxes_per_image, gt_classes,
-        bboxes_preds_per_image, expanded_strides, x_shifts, y_shifts,
-        cls_preds, bbox_preds, obj_preds, labels, imgs, mode="gpu",
+        self,
+        batch_idx,
+        num_gt,
+        total_num_anchors,
+        gt_bboxes_per_image,
+        gt_classes,
+        bboxes_preds_per_image,
+        expanded_strides,
+        x_shifts,
+        y_shifts,
+        cls_preds,
+        bbox_preds,
+        obj_preds,
+        labels,
+        imgs,
+        mode="gpu",
     ):
 
         ##batch_idx代表这个batch中的第几张图片
@@ -544,7 +641,12 @@ class YOLOXHead(nn.Module):
         ##is_in_boxes_and_center.shape为[40, 5632]
         ##此案例中的num_gt为40
         fg_mask, is_in_boxes_and_center = self.get_in_boxes_info(
-            gt_bboxes_per_image, expanded_strides, x_shifts, y_shifts, total_num_anchors, num_gt,
+            gt_bboxes_per_image,
+            expanded_strides,
+            x_shifts,
+            y_shifts,
+            total_num_anchors,
+            num_gt,
         )
 
         ##bboxes_preds_per_image.shape为[5632, 4]
@@ -561,16 +663,16 @@ class YOLOXHead(nn.Module):
             bboxes_preds_per_image = bboxes_preds_per_image.cpu()
 
         ##pair_wise_ious.shape为[40, 5632]，表示5632个pred box与gt box的IoU
-        pair_wise_ious = bboxes_iou(
-            gt_bboxes_per_image, bboxes_preds_per_image, False
-        )
+        pair_wise_ious = bboxes_iou(gt_bboxes_per_image, bboxes_preds_per_image, False)
 
         ##gt_cls_per_image.shape为[40, 5632, 80]
         ##gt_classes.shape为[40]，self.num_classes为80；F.one_hot([40], 80)->[40, 80]
         ##num_in_boxes_anchor为5632；[40, 80]->[40, 5632, 80]
         gt_cls_per_image = (
-            F.one_hot(gt_classes.to(torch.int64), self.num_classes).float()
-            .unsqueeze(1).repeat(1, num_in_boxes_anchor, 1)
+            F.one_hot(gt_classes.to(torch.int64), self.num_classes)
+            .float()
+            .unsqueeze(1)
+            .repeat(1, num_in_boxes_anchor, 1)
         )
         ##pair_wise_ious_loss.shape为[40, 5632]
         pair_wise_ious_loss = -torch.log(pair_wise_ious + 1e-8)
@@ -611,7 +713,10 @@ class YOLOXHead(nn.Module):
         ##pred_ious_this_matching.shape为[39]
         ##matched_gt_inds.shape为[39]
         (
-            num_fg, gt_matched_classes, pred_ious_this_matching, matched_gt_inds
+            num_fg,
+            gt_matched_classes,
+            pred_ious_this_matching,
+            matched_gt_inds,
         ) = self.dynamic_k_matching(cost, pair_wise_ious, gt_classes, num_gt, fg_mask)
         del pair_wise_cls_loss, cost, pair_wise_ious, pair_wise_ious_loss
 
@@ -621,10 +726,22 @@ class YOLOXHead(nn.Module):
             pred_ious_this_matching = pred_ious_this_matching.cuda()
             matched_gt_inds = matched_gt_inds.cuda()
 
-        return gt_matched_classes, fg_mask, pred_ious_this_matching, matched_gt_inds, num_fg
+        return (
+            gt_matched_classes,
+            fg_mask,
+            pred_ious_this_matching,
+            matched_gt_inds,
+            num_fg,
+        )
 
     def get_in_boxes_info(
-        self, gt_bboxes_per_image, expanded_strides, x_shifts, y_shifts, total_num_anchors, num_gt,
+        self,
+        gt_bboxes_per_image,
+        expanded_strides,
+        x_shifts,
+        y_shifts,
+        total_num_anchors,
+        num_gt,
     ):
         expanded_strides_per_image = expanded_strides[0]
         x_shifts_per_image = x_shifts[0] * expanded_strides_per_image
@@ -717,7 +834,8 @@ class YOLOXHead(nn.Module):
 
         ##ious_in_boxes_matrix.shape为[40, 5632]
         ious_in_boxes_matrix = pair_wise_ious
-        n_candidate_k = 10
+
+        n_candidate_k = min(10, ious_in_boxes_matrix.size(1))
         ##topk_ious.shape为[40, 10]，表示与40个gt bbox的IoU排前10的pred bbox的IoU
         ##_.shape为[40, 10]，表示与40个gt bbox对应的10个pred bbox的idx([0, 8400))
         topk_ious, _ = torch.topk(ious_in_boxes_matrix, n_candidate_k, dim=1)
@@ -757,5 +875,8 @@ class YOLOXHead(nn.Module):
         gt_matched_classes = gt_classes[matched_gt_inds]
 
         ##[40, 5632] * [40, 5632] -> [40, 5632] -> [5632] -> [39]
-        pred_ious_this_matching = (matching_matrix * pair_wise_ious).sum(0)[fg_mask_inboxes]
+        pred_ious_this_matching = (matching_matrix * pair_wise_ious).sum(0)[
+            fg_mask_inboxes
+        ]
+
         return num_fg, gt_matched_classes, pred_ious_this_matching, matched_gt_inds
