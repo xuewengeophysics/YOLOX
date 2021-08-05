@@ -818,6 +818,7 @@ class YOLOXHead(nn.Module):
         )
         return is_in_boxes_anchor, is_in_boxes_and_center
 
+    ##3.使用每个GT的预测样本确定它需要分配到的正样本数(dynamic k)
     def dynamic_k_matching(self, cost, pair_wise_ious, gt_classes, num_gt, fg_mask):
         # Dynamic K
         # ---------------------------------------------------------------
@@ -834,13 +835,18 @@ class YOLOXHead(nn.Module):
         ##ious_in_boxes_matrix.shape为[40, 5632]
         ious_in_boxes_matrix = pair_wise_ious
 
+        ##10这个数字并不敏感，在5-15之间几乎都没有影响
         n_candidate_k = min(10, ious_in_boxes_matrix.size(1))
+        ##3.1获取与当前GT的iou前10的样本
         ##topk_ious.shape为[40, 10]，表示与40个gt bbox的IoU排前10的pred bbox的IoU
         ##_.shape为[40, 10]，表示与40个gt bbox对应的10个pred bbox的idx([0, 8400))
         topk_ious, _ = torch.topk(ious_in_boxes_matrix, n_candidate_k, dim=1)
         ##dynamic_ks.shape为[40]
+        ##3.2将这Top10样本的iou求和取整，就为当前GT的dynamic_k，dynamic_k最小保证为1
+        ##为什么这么做？这是人为设定的规则，一头大象和一只蚂蚁的dynamic_k肯定是不一样的
         dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)
         for gt_idx in range(num_gt):
+        	##4.为每个GT去loss最小的前dynamic_k个样本作为正样本
             ##_应该表示最优匹配的cost值
             ##pos_idx表示与gt_idx最优匹配的预测正样本的idx号
             _, pos_idx = torch.topk(
@@ -857,6 +863,8 @@ class YOLOXHead(nn.Module):
             ##找出这些与多个GT目标相匹配的预测目标，看看该预测目标与哪个GT的cost更小，并找出这个GT的idx
             ##将该预测目标与其它GT的匹配度值置为0
             _, cost_argmin = torch.min(cost[:, anchor_matching_gt > 1], dim=0)
+            ##5.人工去掉同一个样本被分配到多个GT的正样本的情况（全局信息）
+            ##对COCO数据集不会对性能有很大影响，对密集场景数据集会有影响
             matching_matrix[:, anchor_matching_gt > 1] *= 0.0
             ##将该预测目标与这个GT的匹配度值置为1
             matching_matrix[cost_argmin, anchor_matching_gt > 1] = 1.0
