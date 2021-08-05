@@ -131,7 +131,6 @@ class YOLOXHead(nn.Module):
         self.iou_loss = IOUloss(reduction="none")
         self.strides = strides
         self.grids = [torch.zeros(1)] * len(in_channels)
-        self.expanded_strides = [None] * len(in_channels)
 
     def initialize_biases(self, prior_prob):
         for conv in self.cls_preds:
@@ -856,8 +855,8 @@ class YOLOXHead(nn.Module):
         ##如果有的预测目标与多个GT目标相匹配
         if (anchor_matching_gt > 1).sum() > 0:
             ##找出这些与多个GT目标相匹配的预测目标，看看该预测目标与哪个GT的cost更小，并找出这个GT的idx
-            cost_min, cost_argmin = torch.min(cost[:, anchor_matching_gt > 1], dim=0)
             ##将该预测目标与其它GT的匹配度值置为0
+            _, cost_argmin = torch.min(cost[:, anchor_matching_gt > 1], dim=0)
             matching_matrix[:, anchor_matching_gt > 1] *= 0.0
             ##将该预测目标与这个GT的匹配度值置为1
             matching_matrix[cost_argmin, anchor_matching_gt > 1] = 1.0
