@@ -2,6 +2,9 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) Megvii, Inc. and its affiliates.
 
+import datetime
+import os
+import time
 from loguru import logger
 
 """
@@ -36,12 +39,6 @@ from yolox.utils import (
     setup_logger,
     synchronize
 )
-
-
-import datetime
-import os
-import time
-
 
 import ipdb
 
@@ -225,8 +222,6 @@ class Trainer:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
     def after_epoch(self):
-        if self.use_model_ema:
-            self.ema_model.update_attr(self.model)
 
         self.save_ckpt(ckpt_name="latest")
 
