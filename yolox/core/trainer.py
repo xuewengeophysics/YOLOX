@@ -29,10 +29,12 @@ from yolox.utils import (
     MeterBuffer,
     ModelEMA,
     all_reduce_norm,
+    get_local_rank,
     get_model_info,
     get_rank,
     get_world_size,
     gpu_mem_usage,
+    is_parallel,
     load_ckpt,
     occupy_mem,
     save_checkpoint,
@@ -54,7 +56,7 @@ class Trainer:
         self.amp_training = args.fp16
         self.is_distributed = get_world_size() > 1
         self.rank = get_rank()
-        self.local_rank = args.local_rank
+        self.local_rank = get_local_rank()
         self.device = "cuda:{}".format(self.local_rank)
         self.use_model_ema = exp.ema
         self.use_model_ema = False
@@ -201,9 +203,7 @@ class Trainer:
 
     def after_train(self):
         logger.info(
-            "Training of experiment is done and the best AP is {:.2f}".format(
-                self.best_ap * 100
-            )
+            "Training of experiment is done and the best AP is {:.2f}".format(self.best_ap * 100)
         )
 
     def before_epoch(self):
@@ -222,7 +222,6 @@ class Trainer:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
     def after_epoch(self):
-
         self.save_ckpt(ckpt_name="latest")
 
         if (self.epoch + 1) % self.exp.eval_interval == 0:
@@ -317,7 +316,13 @@ class Trainer:
         return model
 
     def evaluate_and_save_model(self):
-        evalmodel = self.ema_model.ema if self.use_model_ema else self.model
+        if self.use_model_ema:
+            evalmodel = self.ema_model.ema
+        else:
+            evalmodel = self.model
+            if is_parallel(evalmodel):
+                evalmodel = evalmodel.module
+
         ap50_95, ap50, summary = self.exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )
