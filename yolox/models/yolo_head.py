@@ -678,6 +678,7 @@ class YOLOXHead(nn.Module):
         if mode == "cpu":
             cls_preds_, obj_preds_ = cls_preds_.cpu(), obj_preds_.cpu()
 
+
         ##cls_preds_.shape为[5632, 80]，[5632, 80]->[1, 5632, 80]->[40, 5632, 80]->[40, 5632, 80]
         ##obj_preds_.shape为[5632,  1]，[5632,  1]->[1, 5632,  1]->[40, 5632,  1]->[40, 5632,  1]
         ##cls_preds_.shape为[40, 5632, 80]，[40, 5632, 80] * [40, 5632,  1] -> [40, 5632, 80]
@@ -689,6 +690,7 @@ class YOLOXHead(nn.Module):
         pair_wise_cls_loss = F.binary_cross_entropy(
             cls_preds_.sqrt_(), gt_cls_per_image, reduction="none"
         ).sum(-1)
+
         del cls_preds_
 
         # ipdb.set_trace()

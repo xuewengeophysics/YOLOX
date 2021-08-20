@@ -17,6 +17,7 @@ cur_path = os.path.split(os.path.realpath(__file__))[0]
 sys.path.insert(0, os.path.join(cur_path, "../"))
 
 from yolox.data.data_augment import preproc
+
 from yolox.data.datasets import COCO_CLASSES
 from yolox.exp import get_exp
 from yolox.utils import fuse_model, get_model_info, postprocess, vis
@@ -140,6 +141,7 @@ class Predictor(object):
 
         img, ratio = preproc(img, self.test_size, self.rgb_means, self.std)
         img_info["ratio"] = ratio
+
         img = torch.from_numpy(img).unsqueeze(0)
         if self.device == "gpu":
             img = img.cuda()
@@ -285,7 +287,7 @@ def main(exp, args):
         trt_file = None
         decoder = None
 
-    predictor = Predictor(model, exp, COCO_CLASSES, trt_file, decoder, args.device)
+    predictor = Predictor(model, exp, COCO_CLASSES, trt_file, decoder, args.device, args.legacy)
     current_time = time.localtime()
     if args.demo == "image":
         image_demo(predictor, vis_folder, args.path, current_time, args.save_result)

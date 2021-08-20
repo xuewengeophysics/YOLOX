@@ -12,15 +12,19 @@ import apex
 """
 
 import torch
+
 """
 from apex import amp
 """
+
 try:
     import apex
     from apex import amp
     has_apex = True
 except ImportError:
     has_apex = False
+
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -111,6 +115,7 @@ class Trainer:
         data_end_time = time.time()
 
         outputs = self.model(inps, targets)
+
         loss = outputs["total_loss"]
 
         self.optimizer.zero_grad()
@@ -153,7 +158,6 @@ class Trainer:
 
         if self.amp_training:
             model, optimizer = amp.initialize(model, self.optimizer, opt_level="O1")
-
         # value of epoch will be set in `resume_train`
         model = self.resume_train(model)
 
@@ -180,7 +184,11 @@ class Trainer:
             occupy_mem(self.local_rank)
 
         if self.is_distributed:
+            """
             model = apex.parallel.DistributedDataParallel(model)
+            """
+            if has_apex:
+                model = apex.parallel.DistributedDataParallel(model)
             # from torch.nn.parallel import DistributedDataParallel as DDP
             # model = DDP(model, device_ids=[self.local_rank], broadcast_buffers=False)
 
