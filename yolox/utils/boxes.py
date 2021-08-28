@@ -30,7 +30,7 @@ def filter_box(output, scale_range):
     return output[keep]
 
 
-def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
+def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45, class_agnostic=False):
     ipdb.set_trace()
     ##prediction.shape为[1, 8400, 85]
     ##num_classes为80
@@ -65,12 +65,20 @@ def postprocess(prediction, num_classes, conf_thre=0.7, nms_thre=0.45):
         if not detections.size(0):
             continue
 
-        nms_out_index = torchvision.ops.batched_nms(
-            detections[:, :4],
-            detections[:, 4] * detections[:, 5],
-            detections[:, 6],
-            nms_thre,
-        )
+        if class_agnostic:
+            nms_out_index = torchvision.ops.nms(
+                detections[:, :4],
+                detections[:, 4] * detections[:, 5],
+                nms_thre,
+            )
+        else:
+            nms_out_index = torchvision.ops.batched_nms(
+                detections[:, :4],
+                detections[:, 4] * detections[:, 5],
+                detections[:, 6],
+                nms_thre,
+            )
+
         detections = detections[nms_out_index]
         if output[i] is None:
             output[i] = detections

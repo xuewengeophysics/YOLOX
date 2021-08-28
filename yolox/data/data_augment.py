@@ -140,11 +140,10 @@ def random_perspective(
     return img, targets
 
 
-def _mirror(image, boxes):
+def _mirror(image, boxes, prob=0.5):
     _, width, _ = image.shape
-    if random.randrange(2):
+    if random.random() < prob:
         image = image[:, ::-1]
-        boxes = boxes.copy()
         boxes[:, 0::2] = width - boxes[:, 2::-2]
     return image, boxes
 
@@ -169,8 +168,10 @@ def preproc(img, input_size, swap=(2, 0, 1)):
 
 
 class TrainTransform:
-    def __init__(self, max_labels=50):
+    def __init__(self, max_labels=50, flip_prob=0.5, hsv_prob=1.0):
         self.max_labels = max_labels
+        self.flip_prob = flip_prob
+        self.hsv_prob = hsv_prob
 
     def __call__(self, image, targets, input_dim):
         boxes = targets[:, :4].copy()
@@ -188,15 +189,16 @@ class TrainTransform:
         # bbox_o: [xyxy] to [c_x,c_y,w,h]
         boxes_o = xyxy2cxcywh(boxes_o)
 
-        augment_hsv(image)
-        image_t, boxes = _mirror(image, boxes)
+        if random.random() < self.hsv_prob:
+            augment_hsv(image)
+        image_t, boxes = _mirror(image, boxes, self.flip_prob)
         height, width, _ = image_t.shape
         image_t, r_ = preproc(image_t, input_dim)
         # boxes [xyxy] 2 [cx,cy,w,h]
         boxes = xyxy2cxcywh(boxes)
         boxes *= r_
 
-        mask_b = np.minimum(boxes[:, 2], boxes[:, 3]) > 8
+        mask_b = np.minimum(boxes[:, 2], boxes[:, 3]) > 1
         boxes_t = boxes[mask_b]
         labels_t = labels[mask_b]
 

@@ -12,19 +12,9 @@ __all__ = ["ModelEMA", "is_parallel"]
 
 def is_parallel(model):
     """check if model is in parallel mode."""
-    """
-    import apex
-    """
-    try:
-        import apex
-        has_apex = True
-    except ImportError:
-        has_apex = False
-
     parallel_type = (
         nn.parallel.DataParallel,
         nn.parallel.DistributedDataParallel,
-        apex.parallel.distributed.DistributedDataParallel,
     )
     return isinstance(model, parallel_type)
 
